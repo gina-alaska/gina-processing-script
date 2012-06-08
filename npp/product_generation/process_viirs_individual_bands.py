@@ -86,12 +86,14 @@ def panSharpen(image, data, band):
 	sharp_image.replace_luminance(pan.channels[0])
 
 	return sharp_image
-def truecolorTest(image):
-  image.check_channels('I01', 'M02', 'M04')
 
-  ch1 = image['I01'].data
-  ch2 = image['M04'].data
-  ch3 = image['M02'].data
+
+def generate_rgb(image,r,g,b):
+  image.check_channels(r, g, b)
+
+  ch1 = image[r].data
+  ch2 = image[g].data
+  ch3 = image[b].data
 
   img = geo_image.GeoImage((ch1, ch2, ch3),
                          image.area,
@@ -99,20 +101,20 @@ def truecolorTest(image):
                          fill_value=(0, 0, 0),
                          mode="RGB")
 
-  img.enhance(stretch = "crude")
+  #img.enhance(stretch = "crude")
 
   return img
 
 
 #Make lots of bands..
-bands = set(["M02","M03", "M04", "M05", "M06", "M07", "M08", "I01", "I03", "I04", "I05"])
+bands = set(["M02","M03", "M04", "M05", "M06", "M07", "M08", "I01", "I03", "I04", "I05" ])
 
 #Do command line option parsing..
 parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--verbose", help="increase output verbosity",
                     action="store_true")
-parser.add_argument("-a", "--area", help="Pytroll area definition. alaska is default.", default="alaska",
-                    action="store_true")
+parser.add_argument("-a", "--area", help="Pytroll area definition. alaska is default.", default="alaska")
+# action="store_true")
 parser.add_argument("in_path", help="Input path.")
 parser.add_argument("out_path", help="Output path.")
 args = parser.parse_args()
@@ -122,9 +124,10 @@ if args.verbose:
   print "Out: " + args.out_path
   print "Area: " + args.area
 
-quit()
 input_path = args.in_path
 output_path = args.out_path
+
+#Ok, ready to go, begin real work
 
 try: 
 	scene_id = os.path.basename(input_path)
@@ -133,15 +136,19 @@ try:
 	granules = loadGranules(input_path, bands)
 	print "Data loaded"
 	if(len(granules) > 0):
-		print "Data Assembled"
+                if args.verbose:
+		  print "Data Assembled"
 		unprojected_data = assemble_segments(granules)
 		base_filename = "{path}/{name}".format(path=output_path,name=scene_id)
-
-		print "Projecting data"
+                if args.verbose:
+		  print "Projecting data"
 		#This must be defined in $PPP_CONFIG_DIR/areas.def
 		area = args.area
+                if args.verbose:
+                  print "Using area: " + area
 		projected_data = unprojected_data.project(area, mode="nearest")
-		print "Finished projecting"
+                if args.verbose:
+		  print "Finished projecting"
 
 		#print "Saving low-res truecolor image"
 		#img = truecolorTest(projected_data.image)#projected_data.image.truecolor()
@@ -152,11 +159,23 @@ try:
 		#print "Saving pan-sharpened truecolor image"
 		#panImage.save("{base}_{band}-pan_{projection}.tif".format(base=base_filename,band="truecolor",projection=area))
 
+                #export individual bands
                 for band in bands:
                   img = projected_data.image.channel_image(band)
-                  img.enhance(stretch="crude")
-                  img.enhance(gamma=2.0)
+                  img.enhance(gamma=2.0,stretch="crude")
 		  img.save("{base}_{band}_{projection}.tif".format(base=base_filename,band=band,projection=area))
+
+                #make a suitible bg
+                bg_img = generate_rgb(projected_data.image,"I05", "I05", "I05")
+                #bg_img.enhance(gamma=2.0,stretch="crude")
+
+                #export 543
+                img = generate_rgb(projected_data.image,"M05", "M04", "M03")
+                img.merge(bg_img)
+                img.enhance(stretch="crude")
+                img.save("{base}_{band}_{projection}.tif".format(base=base_filename,band="543",projection=area), compression=9)
+                panImage = panSharpen(img, projected_data, "I01")
+                panImage.save("{base}_{band}-pan_{projection}.tif".format(base=base_filename,band="543",projection=area), compression=9)
 
 except Exception as inst:
 	print "There was a problem with: " + scene_id
