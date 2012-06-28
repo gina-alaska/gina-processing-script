@@ -105,14 +105,12 @@ def generate_rgb(image,r,g,b):
   return img
 
 
-#Make lots of bands..
-bands = set(["M02","M03", "M04", "M05", "M06", "M07", "M08", "I01", "I02","I03", "I04", "I05" ])
-
 #Do command line option parsing..
 parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--verbose", help="increase output verbosity",
                     action="store_true")
 parser.add_argument("-a", "--area", help="Pytroll area definition. alaska is default.", default="alaska")
+parser.add_argument("-b", "--band", help="Band to be processed M02, M03, M04, ..., I01, I02, ..", default="M01")
 # action="store_true")
 parser.add_argument("in_path", help="Input path.")
 parser.add_argument("out_path", help="Output path.")
@@ -126,13 +124,15 @@ if args.verbose:
 input_path = args.in_path
 output_path = args.out_path
 
+band = args.band
+
 #Ok, ready to go, begin real work
 
 try: 
 	scene_id = os.path.basename(input_path)
 	print "Working on pass " + scene_id
 	input_path = input_path + "/viirs"
-	granules = loadGranules(input_path, bands)
+	granules = loadGranules(input_path, [band])
 	print "Data loaded"
 	if(len(granules) > 0):
                 if args.verbose:
@@ -149,36 +149,10 @@ try:
                 if args.verbose:
 		  print "Finished projecting"
 
-                #export individual bands
-                for band in bands:
-                  img = projected_data.image.channel_image(band)
-                  img.enhance(gamma=2.0,stretch="crude")
-		  img.save("{base}_{band}_{projection}.tif".format(base=base_filename,band=band,projection=area))
-
-                #make a suitible bg
-                bg_img = generate_rgb(projected_data.image,"I03", "I03", "I03")
-                bg_img.enhance(gamma=2.0,stretch="crude")
-                bg_img.save("{base}_{band}_{projection}_bg.tif".format(base=base_filename,band="543",projection=area), compression=9)
-                #export 543
-                img = generate_rgb(projected_data.image,"M05", "M04", "M03")
-                img.save("{base}_{band}_{projection}_rgb.tif".format(base=base_filename,band="543",projection=area), compression=9)
-                panImage = panSharpen(img, projected_data, "I01")
-                img.merge(bg_img)
-                img.enhance(stretch="crude")
-                panImage.save("{base}_{band}-pan_{projection}.tif".format(base=base_filename,band="543",projection=area), compression=9)
-
-                #export 543
-                img = generate_rgb(projected_data.image,"M05", "M04", "M02")
-                img.save("{base}_{band}_{projection}_rgb.tif".format(base=base_filename,band="542",projection=area), compression=9)
-                panImage = panSharpen(img, projected_data, "I01")
-                img.merge(bg_img)
-                img.enhance(stretch="crude")
-                panImage.save("{base}_{band}-pan_{projection}.tif".format(base=base_filename,band="542",projection=area), compression=9)
-                #export 321
-                img = generate_rgb(projected_data.image,"I03", "I02", "I01")
-                img.save("{base}_{band}_{projection}_rgb.tif".format(base=base_filename,band="I321",projection=area), compression=9)
-              
-                
+                #export individual band
+                img = projected_data.image.channel_image(band)
+                img.enhance(gamma=2.0, stretch="crude")
+		img.save("{base}_{band}_{projection}_float.tif".format(base=base_filename,band=band,projection=area), floating_point=True)
 
 except Exception as inst:
 	print "There was a problem with: " + scene_id
