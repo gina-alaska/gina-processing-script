@@ -20,7 +20,6 @@ def isvalidgranule(granule,bands,path):
              "instrument": granule.instrument_name,
              "satellite": granule.satname }
   if(granule.time_slot.strftime("%Y") == "1958"):
-    print "Blast from the past"
     return False
   for band in bands:
     values["band"] = band
@@ -28,22 +27,19 @@ def isvalidgranule(granule,bands,path):
     files = glob.glob(os.path.join(path,filename))
     for file in files:
       #Reject small files
-      print "Looking at " + file
       if(os.path.getsize(file) < 1000000):
-        print "Tiny File"
         return False
   return True
 
 #Takes a directory containing L2 viirs hdf files and a Set of 
 #  viirs sensor bands, and returns an assembled PolarFactory object
-def loadGranules(path, bands):
-        print path
+def loadGranules(path, band):
 	# A better way to do this might be glob the directory, and create a union of all the 
 	#  unique combos of _t and _d components
 	files = []
+        band_prefix = "SV"
 	for file in os.listdir(path):
-                print "considering: " + file
-		if fnmatch.fnmatch(file,"GMODO*"):
+		if fnmatch.fnmatch(file,"{band_prefix}{band}*".format(band_prefix=band_prefix,band=band)):
 			files.append(file)
 	
 	#Iterate through the files, generating a datetime object and creating
@@ -62,47 +58,14 @@ def loadGranules(path, bands):
 		#Create the granule, and if it's ok (not a tiny file, not from 1958)
 		# load the requested bands and append it to the scene
 		granule = PolarFactory.create_scene("npp","1","viirs", ts, orbit)
-                print ts
-		if isvalidgranule(granule, bands, path):
-			granule.load(bands, dir=path)
-			granule.area = granule[iter(bands).next()].area
-			granules.append(granule)
-		else:
-			break
+#		if isvalidgranule(granule, bands, path):
+		granule.load([band], dir=path)
+		granules.append(granule)
+#		else:
+#			break
 	print "Found %d granules" % len(granules)
 
 	return granules
-
-#Takes an image, and single hi-res band, and performs a luminace replace on it
-# The image and pan band must be in the same projection
-# Does not modify the original image
-def panSharpen(image, data, band):
-	from mpop.imageo.geo_image import GeoImage
-	pan_data = data[band].data
-	pan = GeoImage((pan_data), data.area, data.time_slot, crange=(0,100)    , mode="L")
-	pan.enhance(gamma=2.0)
-
-	sharp_image = image
-	sharp_image.replace_luminance(pan.channels[0])
-
-	return sharp_image
-
-
-def generate_rgb(image,r,g,b):
-  image.check_channels(r, g, b)
-
-  ch1 = image[r].data
-  ch2 = image[g].data
-  ch3 = image[b].data
-
-  img = geo_image.GeoImage((ch1, ch2, ch3),
-                         image.area,
-                         image.time_slot,
-                         mode="RGB")
-
-  #img.enhance(stretch = "crude")
-
-  return img
 
 
 #Do command line option parsing..
@@ -132,11 +95,12 @@ try:
 	scene_id = os.path.basename(input_path)
 	print "Working on pass " + scene_id
 	input_path = input_path + "/viirs"
-	granules = loadGranules(input_path, [band])
+	granules = loadGranules(input_path, band)
 	print "Data loaded"
 	if(len(granules) > 0):
                 if args.verbose:
 		  print "Data Assembled"
+                  print len(granules)
 		unprojected_data = assemble_segments(granules)
 		base_filename = "{path}/{name}".format(path=output_path,name=scene_id)
                 if args.verbose:
@@ -150,8 +114,16 @@ try:
 		  print "Finished projecting"
 
                 #export individual band
-                img = projected_data.image.channel_image(band)
-                img.enhance(gamma=2.0, stretch="crude")
+                img = projected_data.image.channel_image(band,stretch='no')
+                img.enhance(gamma=2.0, stretch='log')
+                if args.verbose:
+                  print "Base: " + base_filename
+                  print "Band: " + band
+                  print "Projection: " + area
+                  print "Input Path: " + input_path
+                  print "Output Path: " + output_path
+                  print "SceneId: " + scene_id
+                
 		img.save("{base}_{band}_{projection}_float.tif".format(base=base_filename,band=band,projection=area), floating_point=True)
 
 except Exception as inst:
