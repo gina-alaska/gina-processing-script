@@ -48,7 +48,7 @@ opts = Trollop::with_standard_exception_handling(parser) do
   o
 end
 
-contrast_options = "-ndv 0.0 -linear-stretch 128 50"
+contrast_options = "-ndv '0.99995..1' -ndv 0.0 -linear-stretch 128 50 -outndv 0 "
 gdal_opts = "-co TILED=YES -co COMPRESS=LZW -a_nodata \"0 0 0\" "
 
 FileUtils.cd(ARGV[0]) do
